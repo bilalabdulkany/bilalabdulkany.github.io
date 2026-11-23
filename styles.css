@@ -168,3 +168,65 @@ footer { border-top: 1px solid var(--line); padding: 24px 4vw; display: flex; ju
     min-height: 480px;
   }
 }
+
+
+/* FINAL OVERRIDE: make the Ferrari viewport full-width and stack the copy below */
+#lab.section {
+  width: 100%;
+  max-width: none;
+  padding-left: clamp(24px, 7.3vw, 120px);
+  padding-right: clamp(24px, 7.3vw, 120px);
+}
+
+#lab .lab-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: none;
+  gap: 34px;
+}
+
+#lab .lab-viewer {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: clamp(620px, 68vw, 900px);
+  min-height: 620px;
+  flex: 0 0 auto;
+}
+
+#lab .lab-viewer iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#lab .lab-copy {
+  width: 100%;
+  max-width: 900px;
+  align-self: flex-start;
+}
+
+@media (max-width: 850px) {
+  #lab.section {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  #lab .lab-viewer {
+    height: 560px;
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 520px) {
+  #lab.section {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  #lab .lab-viewer {
+    height: 480px;
+    min-height: 480px;
+  }
+}
