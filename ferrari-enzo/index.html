@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ferrari Enzo – procedural controls</title>
+<style>
+  :root { --bg:#0e1013; --panel:#171a20; --line:#2a2f38; --text:#e8eaee; --muted:#8b93a1; --accent:#e10600; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; overflow:hidden; }
+  #view { position:fixed; inset:0; }
+  #panel { position:fixed; top:16px; left:16px; width:260px; padding:14px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  #panel h1 { margin:0 0 10px; font-size:15px; letter-spacing:.02em; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:10px 0; }
+  .row label { color:var(--muted); }
+  input[type=range] { width:150px; accent-color:var(--accent); }
+  button { background:#232833; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); border-color:var(--accent); }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  #status { position:fixed; left:16px; bottom:14px; color:var(--muted); font-size:12px; max-width:90vw; }
+  @media (max-width:560px) { #panel { width:calc(100vw - 32px); } }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="panel">
+  <h1>Ferrari Enzo</h1>
+  <div class="btns">
+    <button id="bDoors">Open doors</button>
+    <button id="bHead">Headlamps</button>
+    <button id="bTail">Tail lamps</button>
+  </div>
+  <div class="row"><label for="sL">Left door</label><input id="sL" type="range" min="0" max="1" step="0.001" value="0"></div>
+  <div class="row"><label for="sR">Right door</label><input id="sR" type="range" min="0" max="1" step="0.001" value="0"></div>
+  <div class="row"><label for="sA">Opening angle</label><input id="sA" type="range" min="20" max="90" step="1" value="55"></div>
+  <div class="row"><label for="cP">Paint</label><input id="cP" type="color" value="#c40000"></div>
+</div>
+<div id="status">Loading model…</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EnzoRig } from './enzo-controls.js';
+
+const MODEL_URL = './ferrari_enzo_converted_v1_0_0.glb';     // written by the Blender script (EXPORT_GLB = True)
+
+const host = document.getElementById('view');
+const status = document.getElementById('status');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled = true;
+host.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1013);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(4, 7, 5); sun.castShadow = true;
+scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 64), new THREE.MeshStandardMaterial({ color: 0x15181d, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+scene.add(floor);
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.495;
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+let rig = null;
+new GLTFLoader().load(MODEL_URL, (gltf) => {
+  scene.add(gltf.scene);
+  gltf.scene.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
+  let box = new THREE.Box3().setFromObject(gltf.scene);
+  gltf.scene.position.y -= box.min.y;                     // stand the car on the floor (before the rig places its lamp lights)
+  gltf.scene.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(gltf.scene);
+  const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  rig = new EnzoRig(gltf.scene, { scene });
+  window.rig = rig;                                       // handy in the console: rig.openDoors(), rig.setLights(true) ...
+  controls.target.set(c.x, size.y * 0.45, c.z);
+  camera.position.set(c.x + size.z * 0.9, size.y * 1.4, c.z + size.z * 1.0);
+  document.getElementById('sA').value = rig.angleDeg;
+  status.textContent = rig.missing.length ? 'Loaded, but missing: ' + rig.missing.join(', ') : 'Drag to orbit · scroll to zoom · D = doors · L = lamps';
+}, undefined, (e) => { status.textContent = 'Could not load ' + MODEL_URL + ' – put the .glb next to this page (and serve over http).'; console.error(e); });
+
+// ---- UI
+const $ = (id) => document.getElementById(id);
+const bDoors = $('bDoors'), bHead = $('bHead'), bTail = $('bTail'), sL = $('sL'), sR = $('sR');
+function sync() {
+  if (!rig) return;
+  const open = rig.doors.L && rig.doors.L.target > 0.5;
+  bDoors.textContent = open ? 'Close doors' : 'Open doors';
+  bDoors.classList.toggle('on', !!open);
+  bHead.classList.toggle('on', rig.lights.head.on);
+  bTail.classList.toggle('on', rig.lights.tail.on);
+}
+bDoors.onclick = () => { rig && rig.toggleDoors(); sL.value = sR.value = rig.doors.L.target; sync(); };
+bHead.onclick = () => { rig && rig.setHeadlamps(!rig.lights.head.on); sync(); };
+bTail.onclick = () => { rig && rig.setTaillights(!rig.lights.tail.on); sync(); };
+sL.oninput = () => rig && rig.setDoor('L', +sL.value, false);
+sR.oninput = () => rig && rig.setDoor('R', +sR.value, false);
+$('sA').oninput = (e) => rig && rig.setAngle(+e.target.value);
+$('cP').oninput = (e) => rig && rig.setPaint(e.target.value);
+addEventListener('keydown', (e) => { if (e.key === 'd' || e.key === 'D') bDoors.click(); if (e.key === 'l' || e.key === 'L') { rig && rig.toggleLights(); sync(); } });
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (rig) {
+    rig.update(dt);
+    if (rig.doors.L && document.activeElement !== sL) sL.value = rig.doors.L.value;
+    if (rig.doors.R && document.activeElement !== sR) sR.value = rig.doors.R.value;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
